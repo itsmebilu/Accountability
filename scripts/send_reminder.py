@@ -1,115 +1,156 @@
 #!/usr/bin/env python3
 """
-Send a single goal-aware reminder to Telegram (or ntfy if configured).
-
-Usage:
-    python send_reminder.py <goal>
-
-<goal> can be: running, gym, study, diet, evening_checkin
-
-The message is personalized using AI + recent log data and asks for
-the specific structured info needed to track that goal.
+Send a single goal-aware, context-smart reminder to Telegram (or ntfy).
+Usage: python send_reminder.py <goal>
+Goals: running, gym, study, diet, evening_checkin
 """
-import json
 import os
 import sys
-import urllib.parse
-import urllib.request
-
-import ai_provider
+import json
+import time
+import random
+import requests
+from datetime import datetime, timezone
+from google import genai
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 
-
 def load_config():
-    with open(os.path.join(ROOT, "config.json")) as f:
+    path = os.path.join(ROOT, "config.json")
+    if not os.path.exists(path):
+        return {}
+    with open(path) as f:
         return json.load(f)
 
-
-def load_recent_log(n=7):
+def load_all_logs():
     path = os.path.join(ROOT, "data", "log.json")
     if not os.path.exists(path):
         return []
     with open(path) as f:
-        entries = json.load(f)
-    return entries[-n:]
+        return json.load(f)
 
-
-def build_prompt(goal, config, recent):
+def get_active_goals(config, all_logs):
+    """Scans history for goal updates via Telegram."""
     g = config.get("goals", {})
-    history = "\n".join(
-        f"- {e['timestamp']}: {e.get('raw', e.get('text',''))} | parsed: {json.dumps(e.get('parsed',{}))}"
-        for e in recent
-    ) or "No recent entries."
+    run_goal = {"weekly_km": g.get("running", {}).get("weekly_km", 30), "runs_per_week": g.get("running", {}).get("runs_per_week", 4)}
+    gym_goal = {"sessions_per_week": g.get("gym", {}).get("sessions_per_week", 4)}
+    diet_goal = {"daily_protein_g": g.get("diet", {}).get("daily_protein_g", 150)}
+    
+    for e in all_logs:
+        ug = e.get("updated_goals", {})
+        if ug:
+            if ug.get("weekly_km"): run_goal["weekly_km"] = ug["weekly_km"]
+            if ug.get("runs_per_week"): run_goal["runs_per_week"] = ug["runs_per_week"]
+            if ug.get("sessions_per_week"): gym_goal["sessions_per_week"] = ug["sessions_per_week"]
+            if ug.get("daily_protein_g"): diet_goal["daily_protein_g"] = ug["daily_protein_g"]
+            
+    return run_goal, gym_goal, diet_goal
+
+def should_skip_reminder(all_logs, task):
+    """If the user checked in within the last 2.5 hours, do not bother them."""
+    if not all_logs:
+        return False
+        
+    last_log = all_logs[-1]
+    ts = last_log.get("timestamp")
+    
+    try:
+        if isinstance(ts, int) or (isinstance(ts, str) and ts.isdigit()):
+            last_time = int(ts)
+        else:
+            last_time = int(datetime.fromisoformat(str(ts)).timestamp())
+            
+        current_time = int(datetime.now(timezone.utc).timestamp())
+        hours_since_last_chat = (current_time - last_time) / 3600
+        
+        if hours_since_last_chat < 2.5 and task != "evening_checkin":
+            print(f"User active {hours_since_last_chat:.1f} hours ago. Skipping redundant {task} reminder.")
+            return True
+    except Exception as e:
+        print(f"Time parse error in skip logic: {e}")
+        
+    return False
+
+def build_prompt(goal, config, all_logs):
+    run_goal, gym_goal, diet_goal = get_active_goals(config, all_logs)
+    
+    # Extract just the last 5 logs for immediate conversational context
+    recent = all_logs[-5:] if len(all_logs) >= 5 else all_logs
+    history = "\n".join(f"- User: {e.get('user_input', '')}" for e in recent) or "No recent entries."
+
+    base_persona = (
+        "You are a strict, disciplined, old-school Pahadi accountability coach. "
+        "You are texting Ahan, a rugged intellectual based in Dehradun preparing for the UPSC CSE Prelims (May 24, 2026). "
+        "He is also training for half-marathons, skiing, and adventure sports. Demand excellence and zero excuses. "
+    )
 
     prompts = {
         "running": (
-            f"You are a running coach texting someone. Their goal is {g.get('running',{}).get('weekly_km',30)}km/week "
-            f"across {g.get('running',{}).get('runs_per_week',4)} runs. "
-            f"Write ONE motivating push (max 2 sentences, 1 emoji max) for their morning run. "
-            f"Recent log:\n{history}\n\nReply ONLY with the message."
+            f"{base_persona}\n"
+            f"His active goal is {run_goal['weekly_km']}km/week across {run_goal['runs_per_week']} runs.\n"
+            f"Write ONE gritty, motivating push (max 2 sentences, 1 emoji max) for his morning run on the trails or road.\n"
+            f"Recent log context:\n{history}\n\nReply ONLY with the text message."
         ),
         "gym": (
-            f"You are a gym coach texting someone. They do upper/lower splits, "
-            f"{g.get('gym',{}).get('sessions_per_week',4)} sessions/week. "
-            f"Look at their recent log to figure out if today should be upper or lower, and write "
-            f"ONE short motivating message (max 2 sentences, 1 emoji). "
-            f"Recent log:\n{history}\n\nReply ONLY with the message."
+            f"{base_persona}\n"
+            f"His active goal is {gym_goal['sessions_per_week']} strength sessions/week.\n"
+            f"Write ONE short, commanding message to get him to the gym and lift heavy (max 2 sentences, 1 emoji).\n"
+            f"Recent log context:\n{history}\n\nReply ONLY with the text message."
         ),
         "study": (
-            f"You are a study coach. Their weekly study goals: "
-            + ", ".join(f"{s['name']} {s['weekly_hours']}h" for s in g.get('study',{}).get('subjects',[]))
-            + f". Write ONE focused study prompt (max 2 sentences, 1 emoji). "
-            f"Recent log:\n{history}\n\nReply ONLY with the message."
+            f"{base_persona}\n"
+            f"Write ONE focused, intense prompt demanding he lock in for his UPSC syllabus prep (max 2 sentences, 1 emoji).\n"
+            f"Remind him the clock is ticking. Ask what subject he is clearing today.\n"
+            f"Recent log context:\n{history}\n\nReply ONLY with the text message."
         ),
         "diet": (
-            f"You are a nutrition coach. Their daily protein target is "
-            f"{g.get('diet',{}).get('daily_protein_g',150)}g. "
-            f"Write ONE short diet check-in nudge asking how protein intake is going (max 2 sentences, 1 emoji). "
-            f"Recent log:\n{history}\n\nReply ONLY with the message."
+            f"{base_persona}\n"
+            f"His daily target is {diet_goal['daily_protein_g']}g of protein.\n"
+            f"Write ONE short nudge asking for a diet check-in. No junk food allowed (max 2 sentences, 1 emoji).\n"
+            f"Recent log context:\n{history}\n\nReply ONLY with the text message."
         ),
         "evening_checkin": (
-            f"You are an accountability coach. The user tracks: running (goal "
-            f"{g.get('running',{}).get('weekly_km',30)}km/week), gym (upper/lower split), "
-            f"study subjects ({', '.join(s['name'] for s in g.get('study',{}).get('subjects',[]))}), "
-            f"and daily protein (target {g.get('diet',{}).get('daily_protein_g',150)}g).\n\n"
-            f"Write a conversational evening check-in message (2-3 sentences) asking them to share "
-            f"today's: run distance (or 0), gym session (upper/lower or rest), hours studied per subject, "
-            f"and protein intake. Make it feel like a friend asking, not a form. 1 emoji max.\n\n"
-            f"Recent log:\n{history}\n\nReply ONLY with the message."
+            f"{base_persona}\n"
+            f"Write a 2-3 sentence evening check-in message demanding his daily metrics: km run, gym session, "
+            f"hours studied for UPSC subjects, and total protein intake. Include a short quote about "
+            f"discipline. Make it feel like an intense mentor texting. 1 emoji max.\n"
+            f"Recent log context:\n{history}\n\nReply ONLY with the text message."
         ),
     }
     return prompts.get(goal)
 
-
 FALLBACKS = {
-    "running":         "🏃 Morning run time! Lace up and get out — even an easy 4km counts toward your weekly goal.",
-    "gym":             "💪 Gym session today — check your split and make it count.",
-    "study":           "📖 Study block starting now — pick your subject and dive in.",
-    "diet":            "🥗 Midday check — how's your protein looking? Don't let it slip.",
-    "evening_checkin": "👋 Day's almost done! Drop a quick note: km run, gym session, study hours per subject, and protein intake.",
+    "running": "🏃 Morning run time, Ahan. The mountain trails are waiting. Get your mileage in.",
+    "gym": "💪 Gym session today. No excuses, go move some heavy iron.",
+    "study": "📖 UPSC CSE Prelims is ticking closer. Lock in and clear your syllabus block now.",
+    "diet": "🥗 Midday check. Where is your protein intake at? Hit your daily target.",
+    "evening_checkin": "👋 Day is done. Give me your numbers: km run, gym split, study hours, and protein intake. Sabr aur junoon.",
 }
 
-
 def send_telegram(text):
-    token = os.environ["TELEGRAM_BOT_TOKEN"]
-    chat_id = os.environ["TELEGRAM_CHAT_ID"]
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    if not token or not chat_id:
+        return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    data = urllib.parse.urlencode({"chat_id": chat_id, "text": text}).encode()
-    urllib.request.urlopen(urllib.request.Request(url, data=data), timeout=20)
-
+    try:
+        requests.post(url, json={"chat_id": chat_id, "text": text}, timeout=10)
+    except Exception as e:
+        print(f"Telegram failed: {e}")
 
 def send_ntfy(text, title="Accountability"):
     topic = os.environ.get("NTFY_TOPIC")
     if not topic:
         return
-    req = urllib.request.Request(
-        f"https://ntfy.sh/{topic}",
-        data=text.encode(),
-        headers={"Title": title, "Priority": "high"},
-    )
-    urllib.request.urlopen(req, timeout=10)
-
+    try:
+        requests.post(
+            f"https://ntfy.sh/{topic}",
+            data=text.encode('utf-8'),
+            headers={"Title": title, "Priority": "high"},
+            timeout=10
+        )
+    except Exception as e:
+        print(f"Ntfy failed: {e}")
 
 def main():
     if len(sys.argv) < 2:
@@ -118,19 +159,41 @@ def main():
 
     goal = sys.argv[1]
     config = load_config()
-    recent = load_recent_log()
-    prompt = build_prompt(goal, config, recent)
-    message = (ai_provider.generate(prompt) if prompt else None) or FALLBACKS.get(goal, "Time to check in!")
+    all_logs = load_all_logs()
 
-    # Send to whichever channel(s) are configured
-    if os.environ.get("TELEGRAM_BOT_TOKEN"):
-        send_telegram(message)
-    if os.environ.get("NTFY_TOPIC"):
-        goal_titles = {"running":"🏃 Run time","gym":"💪 Gym time","study":"📖 Study time","diet":"🥗 Diet check","evening_checkin":"📋 Daily check-in"}
-        send_ntfy(message, goal_titles.get(goal, "Reminder"))
+    # Pre-empt the alarm if you've already been chatting with the bot recently
+    if should_skip_reminder(all_logs, goal):
+        sys.exit(0)
 
+    prompt = build_prompt(goal, config, all_logs)
+    message = None
+    
+    if prompt:
+        for attempt in range(3):
+            try:
+                client = genai.Client()
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=prompt
+                )
+                message = response.text
+                break
+            except Exception as e:
+                print(f"API Attempt {attempt + 1} failed: {str(e)}")
+                if "503" in str(e) and attempt < 2:
+                    time.sleep(10)
+                else:
+                    break
+
+    # If the AI failed completely, use the hardcoded fallback
+    if not message:
+        message = FALLBACKS.get(goal, "Time to check in!")
+
+    send_telegram(message)
+    
+    goal_titles = {"running":"🏃 Run time","gym":"💪 Gym time","study":"📖 Study time","diet":"🥗 Diet check","evening_checkin":"📋 Daily check-in"}
+    send_ntfy(message, goal_titles.get(goal, "Reminder"))
     print(f"Sent [{goal}]: {message}")
-
 
 if __name__ == "__main__":
     main()
