@@ -8,7 +8,7 @@ on:
     - cron: '0 8 * * *'       # 13:30 IST  — diet / protein check
     - cron: '30 15 * * *'     # 21:00 IST  — evening check-in (all goals)
     - cron: '30 15 * * 0'     # 21:00 IST Sunday — weekly review
-    - cron: '*/15 * * * *'    # every 15 min — poll Telegram for your replies
+    - cron: '*/5 * * * *'    # every 15 min — poll Telegram for your replies
   workflow_dispatch:
     inputs:
       task:
