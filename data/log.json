@@ -18,5 +18,10 @@
     "timestamp": "2026-06-25T15:07:23+00:00",
     "raw": "Hello",
     "parsed": {}
+  },
+  {
+    "timestamp": 1782406757,
+    "user_input": "hello",
+    "bot_response": "\"Hello\"? This isn't a tea party.\n\nTime is a weapon. You're either wielding it or bleeding it.\n\nWhat's the status report? Training log for yesterday. Study hours logged. Any slippage? Out with it. The clock doesn't wait."
   }
 ]
