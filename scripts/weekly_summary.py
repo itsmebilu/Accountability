@@ -150,7 +150,7 @@ def main():
     try:
         client = genai.Client()
         response = client.models.generate_content(
-            model='gemini-1.5-flash-8b',
+            model='gemini-3.1-flash-light',
             contents=prompt
         )
         summary = response.text
