@@ -2,6 +2,7 @@
 """Send a structured weekly review summarising all goals and UPSC syllabus progress."""
 import os
 import json
+import requests
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
