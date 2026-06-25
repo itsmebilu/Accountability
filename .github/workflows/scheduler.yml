@@ -1,0 +1,105 @@
+name: Accountability Bot
+
+on:
+  schedule:
+    - cron: '30 0 * * *'      # 06:00 IST  — morning run alarm
+    - cron: '0 2 * * *'       # 07:30 IST  — gym reminder
+    - cron: '30 3 * * *'      # 09:00 IST  — study reminder
+    - cron: '0 8 * * *'       # 13:30 IST  — diet / protein check
+    - cron: '30 15 * * *'     # 21:00 IST  — evening check-in (all goals)
+    - cron: '30 15 * * 0'     # 21:00 IST Sunday — weekly review
+    - cron: '*/15 * * * *'    # every 15 min — poll Telegram for your replies
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Task to run (running|gym|study|diet|evening_checkin|weekly|poll)'
+        default: 'poll'
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Morning run alarm
+        if: github.event.schedule == '30 0 * * *' || github.event.inputs.task == 'running'
+        run: python scripts/send_reminder.py running
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          NTFY_TOPIC:         ${{ secrets.NTFY_TOPIC }}
+          GEMINI_API_KEY:     ${{ secrets.GEMINI_API_KEY }}
+          ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Gym reminder
+        if: github.event.schedule == '0 2 * * *' || github.event.inputs.task == 'gym'
+        run: python scripts/send_reminder.py gym
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          NTFY_TOPIC:         ${{ secrets.NTFY_TOPIC }}
+          GEMINI_API_KEY:     ${{ secrets.GEMINI_API_KEY }}
+          ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Study reminder
+        if: github.event.schedule == '30 3 * * *' || github.event.inputs.task == 'study'
+        run: python scripts/send_reminder.py study
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          NTFY_TOPIC:         ${{ secrets.NTFY_TOPIC }}
+          GEMINI_API_KEY:     ${{ secrets.GEMINI_API_KEY }}
+          ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Diet / protein check
+        if: github.event.schedule == '0 8 * * *' || github.event.inputs.task == 'diet'
+        run: python scripts/send_reminder.py diet
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          NTFY_TOPIC:         ${{ secrets.NTFY_TOPIC }}
+          GEMINI_API_KEY:     ${{ secrets.GEMINI_API_KEY }}
+          ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Evening check-in
+        if: github.event.schedule == '30 15 * * *' || github.event.inputs.task == 'evening_checkin'
+        run: python scripts/send_reminder.py evening_checkin
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          NTFY_TOPIC:         ${{ secrets.NTFY_TOPIC }}
+          GEMINI_API_KEY:     ${{ secrets.GEMINI_API_KEY }}
+          ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Weekly review
+        if: github.event.schedule == '30 15 * * 0' || github.event.inputs.task == 'weekly'
+        run: python scripts/weekly_summary.py
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          NTFY_TOPIC:         ${{ secrets.NTFY_TOPIC }}
+          GEMINI_API_KEY:     ${{ secrets.GEMINI_API_KEY }}
+          ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Poll for replies
+        if: github.event.schedule == '*/15 * * * *' || github.event.inputs.task == 'poll' || github.event_name == 'workflow_dispatch'
+        run: python scripts/poll_replies.py
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          GEMINI_API_KEY:     ${{ secrets.GEMINI_API_KEY }}
+          ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Commit log updates
+        run: |
+          git config user.name "accountability-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add data/ config.json
+          git diff --cached --quiet || git commit -m "Update logs [skip ci]"
+          git push
