@@ -142,7 +142,7 @@ def main():
     1. Analyze their physical numbers against their active targets.
     2. Review their UPSC CSE syllabus progress. Call out if they are dragging out a subject past its allocated deadline, or celebrate if they finally marked a subject as COMPLETED.
     3. Give a specific, gritty directive for next week.
-    4. End with a short line of Urdu poetry or a quote about perseverance, sifar, and junoon.
+    4. End with a short line of a quote about perseverance.
     Plain text only.
     """
     
