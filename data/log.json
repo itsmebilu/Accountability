@@ -28,5 +28,22 @@
     "timestamp": 1782406950,
     "user_input": "I was busy building this bot, I couldn't study or run today. I will do it tomorrow",
     "bot_response": "No.\n\nElite doesn't get 'busy' with distractions. You missed *two* critical disciplines.\n\nThat bot better be studying for you, because you're pulling an all-nighter. Double the missed study hours *tonight*. Then you'll fit in *two* runs tomorrow: the planned one, and the one you owe yourself. No excuses, just faster splits.\n\n**\"\u0639\u0645\u0644 \u0633\u06d2 \u0632\u0646\u062f\u06af\u06cc \u0628\u0646\u062a\u06cc \u06c1\u06d2 \u062c\u0646\u062a \u0628\u06be\u06cc \u062c\u06c1\u0646\u0645 \u0628\u06be\u06cc\u060c \u06cc\u06c1 \u062e\u0627\u06a9\u06cc \u0627\u067e\u0646\u06cc \u0641\u0637\u0631\u062a \u0645\u06cc\u06ba \u0646\u06c1 \u0646\u0648\u0631\u06cc \u06c1\u06d2 \u0646\u06c1 \u0646\u0627\u0631\u06cc \u06c1\u06d2\"**\n*(Life is made by deeds, heaven and hell too; this being of dust is neither angelic nor demonic in nature.)*\n\nGet to work."
+  },
+  {
+    "timestamp": 1782459154,
+    "user_input": "hello",
+    "bot_response": "Hello yourself. This isn't a casual chatline; it's an accountability hub. Where's the progress report? The numbers? The effort? Let's not waste each other's time. Report your activities, or don't expect results. 'The only way to do great work is to love what you do.' - Steve Jobs. Are you loving the grind, or just saying hello?",
+    "parsed": {
+      "run_km": 0.0,
+      "gym_session": null,
+      "protein_g": 0,
+      "study_sessions": []
+    },
+    "updated_goals": {
+      "weekly_km": null,
+      "runs_per_week": null,
+      "sessions_per_week": null,
+      "daily_protein_g": null
+    }
   }
 ]
