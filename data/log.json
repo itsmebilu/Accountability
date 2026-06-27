@@ -45,5 +45,22 @@
       "sessions_per_week": null,
       "daily_protein_g": null
     }
+  },
+  {
+    "timestamp": 1782601479,
+    "user_input": "Going for an early morning 12km run",
+    "bot_response": "Excellent start to the day with a 12km run! That's a solid effort and a great way to build consistency. Remember, showing up is half the battle, but are you pushing yourself? Let's keep that momentum going for your other goals. \"Discipline is the bridge between goals and accomplishment.\" What's next on your agenda for today?",
+    "parsed": {
+      "run_km": 12.0,
+      "gym_session": null,
+      "protein_g": 0,
+      "study_sessions": []
+    },
+    "updated_goals": {
+      "weekly_km": null,
+      "runs_per_week": null,
+      "sessions_per_week": null,
+      "daily_protein_g": null
+    }
   }
 ]
